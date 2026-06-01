@@ -11,6 +11,7 @@ let dong;
 let playing = false;
 let text = ''; // bottom line
 let t = 0; // seconds / 10
+let sessionStart = 0;
 
 let duration = 1; // minutes
 let breaths = 4; // per minute
@@ -30,9 +31,23 @@ $(document).ready(() => {
     $text = $('.text');
     ding = new Audio('./sound/ding.mp3');
     ding.volume = .2;
+    ding.preload = 'auto';
     dong = new Audio('./sound/dong.mp3');
     dong.volume = .2;
+    dong.preload = 'auto';
 });
+
+function playDing() {
+    const audio = ding.cloneNode();
+    audio.volume = ding.volume;
+    audio.play().catch(() => {});
+}
+
+function playDong() {
+    const audio = dong.cloneNode();
+    audio.volume = dong.volume;
+    audio.play().catch(() => {});
+}
 
 $(document).on('click', '.select div', (e) => {
     const $el = $(e.currentTarget);
@@ -104,6 +119,7 @@ $(document).on('click', '.reset', () => {
     // Reset clock, time and breathpoints
     playing = false;
     t = 0;
+    sessionStart = 0;
     text = '';
     breathPoints = [];
     breathPointsToCheck = [];
@@ -130,14 +146,14 @@ $(document).on('click', '.reset', () => {
 });
 
 function start() {
-    clock();
-
     setTimeout(() => {
         if (playing) {
             $logo.css({
                 'animation-name': animation,
                 'animation-duration': (60 / breaths) + 's'
             });
+            sessionStart = performance.now();
+            clock();
         }
     }, 1000);
 }
@@ -150,6 +166,7 @@ function getOptions() {
 }
 
 function computeBreathsPoints() {
+    breathPoints = [];
     const steps = breaths * 2 * duration;
     for (let i = 0; i <= steps; i += 1) {
         let point = i * 60 / breaths / 2;
@@ -159,17 +176,21 @@ function computeBreathsPoints() {
 }
 
 function clock() {
-    t += .1;
-    t = Math.round(t * 10) / 10;
+    const elapsed = (performance.now() - sessionStart) / 1000;
+    t = Math.round(elapsed * 10) / 10;
 
     if (breathPointsToCheck.length === 0 && playing) {
         end();
+        return;
     }
 
-    if (t > breathPointsToCheck[0]) {
+    while (breathPointsToCheck.length > 0 && t > breathPointsToCheck[0]) {
         breathPointsToCheck.shift();
 
         if (breathPointsToCheck.length > 0) {
+            if (sounds === 'all') {
+                playDing();
+            }
             if (breathPoints.length - breathPointsToCheck.length > 6) {
                 switchText(' ');
             } else {
@@ -178,12 +199,18 @@ function clock() {
         }
     }
 
-    setTimeout(() => {
-        if (playing) clock();
-    }, 100);
+    if (!playing) return;
+
+    const nextTick = sessionStart + (Math.floor(elapsed * 10) + 1) * 100 - performance.now();
+    setTimeout(clock, Math.max(0, nextTick));
 }
 
 function switchText(overwrite) {
+    const isEnd = overwrite && overwrite === `C’est terminé !<div class="button reset"><p>Revenir à l'accueil</p></div>`;
+    if (isEnd && (sounds === 'all' || sounds === 'end')) {
+        playDong();
+    }
+
     $text.fadeOut(1000);
     setTimeout(() => {
         if (text === 'Inspirez') {
@@ -193,13 +220,6 @@ function switchText(overwrite) {
         }
         $text.html(overwrite || text);
         $text.fadeIn(1000);
-        if (overwrite && overwrite === `C’est terminé !<div class="button reset"><p>Revenir à l'accueil</p></div>` && (sounds === 'all' || sounds === 'end')) {
-            dong.currentTime = 0;
-            dong.play();
-        } else if (sounds === 'all') {
-            ding.currentTime = 0;
-            ding.play();
-        }
     }, 1000);
 }
 
